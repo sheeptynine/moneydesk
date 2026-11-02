@@ -60,6 +60,11 @@ h1,h2,h3{margin:0;font-weight:600;text-wrap:balance}
 .btn.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
 .btn.primary:hover{background:#2a2a2a}
 .btn.sm{padding:5px 10px;font-size:12.5px;border-radius:9px}
+.gd-books{display:flex;flex-direction:column;gap:6px}
+.gd-books .gd-lbl{font-size:11.5px;color:var(--muted);padding-left:2px}
+.gd-books .gd-seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.btn.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.btn.on:hover{background:#2a2a2a}
 .icon-btn{width:32px;height:32px;border-radius:9px;border:1px solid var(--line-2);background:var(--surface);display:grid;place-items:center;padding:0;color:var(--ink-2)}
 .icon-btn:hover{background:var(--surface-2);color:var(--ink)}
 .icon-btn:disabled{opacity:.35;cursor:default}
@@ -266,6 +271,8 @@ td.r,th.r{text-align:right;white-space:nowrap}
   .rail{position:static;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px;border-right:0;border-bottom:1px solid var(--line);padding:12px max(16px, env(safe-area-inset-right,0px)) 12px max(16px, env(safe-area-inset-left,0px))}
   .nav{flex-direction:row;flex-wrap:wrap;width:100%;order:3}
   .rail-foot{margin:0 0 0 auto;flex-direction:row;align-items:center}
+  .gd-books{flex-direction:row;align-items:center}
+  .gd-books .gd-lbl{display:none}
   .file-box{display:none}
   .work{padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px))}
   .two,.rcol{grid-template-columns:minmax(0,1fr)}
@@ -356,6 +363,10 @@ td.r,th.r{text-align:right;white-space:nowrap}
   .file-box{display:none}
   .rail-foot{align-items:center}
   .rail-foot .btn{font-size:0;gap:0;padding:9px}
+  .gd-books .gd-lbl{display:none}
+  .gd-books .gd-seg{grid-template-columns:1fr;gap:6px}
+  .rail-foot .gd-books .gd-seg .btn{font-size:12px;padding:8px 4px}
+  .gd-books .gd-seg .btn svg{display:none}
   .work{padding-left:20px;padding-right:20px}
 }
 .dtop{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(300px,1fr);gap:20px;align-items:stretch;margin-bottom:20px}
@@ -378,7 +389,7 @@ td.r,th.r{text-align:right;white-space:nowrap}
     <div class="rail-foot">
       <div class="file-box" id="fileBox"></div>
       <button class="btn primary" id="openBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 15V3M7 8l5-5 5 5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>Open backup</button>
-      <button class="btn" id="driveBtn" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M8.5 3h7l6 10.5-3.5 6H5.5L2 13.5z"/><path d="M8.5 3l6.5 10.5H2M15.5 3L9 13.5M5.5 19.5l3.5-6h12.5"/></svg>Connect Google Drive</button>
+      <div class="gd-books" id="driveBox" hidden></div>
       <input type="file" id="fileInput" accept=".mmbak,.sqlite,.db,.sqlite3" hidden>
     </div>
   </aside>
@@ -1692,13 +1703,16 @@ function render(){
   const D = S.D;
   $("#viewSub").textContent = (S.sample ? "Sample data" : (S.file ? S.file.name : "")) + " · " + NF.format(D.tx.length) + " records · " + dShort(D.minD) + " " + D.minD.slice(0,4) + " – " + dShort(D.maxD) + " " + D.maxD.slice(0,4);
   const gdOn = GD.on(), gdCon = gdOn && GD.connected();
-  const gdBanner = (gdCon && S.gdNeed && !S.gdBusy) ? `<div class="banner"><span><strong>Google Drive is connected.</strong> Load your latest Money Manager backup from Drive.</span><span class="spacer"></span><button class="btn primary sm" data-drive>Load latest</button></div>` : "";
-  $("#banner").innerHTML = (S.error ? `<div class="err">${esc(S.error)}</div>` : "") + gdBanner + (S.sample && !gdBanner ? `<div class="banner"><span><strong>You're looking at sample data.</strong> Open your Money Manager backup (.mmbak) to see your own records. The file is read inside this window and never uploaded.</span><span class="spacer"></span>${gdOn && !gdCon ? `<button class="btn sm" data-drive>Connect Google Drive</button>` : ""}<button class="btn primary sm" data-open>Open backup</button></div>` : "");
-  const db = $("#driveBtn"); db.hidden = !gdOn; db.lastChild.textContent = gdCon ? "Load latest from Drive" : "Connect Google Drive";
+  const bookBtns = (cls, act) => Object.keys(BOOKS).map(k => `<button class="btn ${cls}${act && act === k ? " on" : ""}" data-drive="${k}" title="Load the newest backup from the \u201c${esc(BOOKS[k])}\u201d folder in Google Drive" aria-pressed="${act === k}">${GD_ICON}${k}</button>`).join("");
+  const gdBanner = (gdCon && S.gdNeed && !S.gdBusy) ? `<div class="banner"><span><strong>Google Drive is connected.</strong> Load the latest backup:</span><span class="spacer"></span>${bookBtns("sm", null)}</div>` : "";
+  $("#banner").innerHTML = (S.error ? `<div class="err">${esc(S.error)}</div>` : "") + gdBanner + (S.sample && !gdBanner ? `<div class="banner"><span><strong>You're looking at sample data.</strong> Open your Money Manager backup (.mmbak) to see your own records. The file is read inside this window and never uploaded.</span><span class="spacer"></span>${gdOn && !gdCon ? `<button class="btn sm" data-drive="${DEFAULT_BOOK}">Connect Google Drive</button>` : ""}<button class="btn primary sm" data-open>Open backup</button></div>` : "");
+  const dbx = $("#driveBox"); dbx.hidden = !gdOn;
+  dbx.innerHTML = !gdOn ? "" : !gdCon ? `<button class="btn" data-drive="${DEFAULT_BOOK}">${GD_ICON}Connect Google Drive</button>`
+    : `<div class="gd-lbl">Latest from Google Drive</div><div class="gd-seg">${bookBtns("", S.file && !S.sample ? S.file.book : null)}</div>`;
   const fb = $("#fileBox");
   const gdLine = gdCon ? `<div class="meta">Google Drive connected · <button class="linkish" id="driveOff">Disconnect</button></div>` : "";
   fb.innerHTML = S.sample ? `<div class="meta">No backup open</div><div class="fn">Sample data</div>${gdLine}` :
-    `<div class="meta">${S.file.drive ? "From Google Drive · saved " + esc(gdTime(S.file.drive)) : "Open backup"}</div><div class="fn">${esc(S.file.name)}</div><div class="meta">${S.file.saved ? "Kept on this device" : "Not kept after closing"}</div>
+    `<div class="meta">${S.file.drive ? (S.file.book ? esc(S.file.book) + " · " : "") + "Google Drive · saved " + esc(gdTime(S.file.drive)) : "Open backup"}</div><div class="fn">${esc(S.file.name)}</div><div class="meta">${S.file.saved ? "Kept on this device" : "Not kept after closing"}</div>
      <div style="display:flex;gap:12px">${S.file.saved ? `<button class="linkish" id="forget">Forget</button>` : `<button class="linkish" id="keep">Keep on this device</button>`}<button class="linkish" id="sampleBtn">Show sample</button></div>${gdLine}`;
   renderView();
 }
@@ -1721,11 +1735,11 @@ async function openBytes(bytes, name, opts={}){
     if (!D.tx.length) throw new Error("The backup opened, but it has no transactions in it.");
     S.D = D; S.sample = false; S.error = ""; SYM = D.mainSym || "Rp";
     const short = (name.match(/\((\d{2})-(\d{2})-(\d{4})/) || []);
-    S.file = { name, short: short.length ? short[1] + "/" + short[2] + "/" + short[3] : "BOOK", saved: !!opts.saved, drive: opts.drive || null };
+    S.file = { name, short: short.length ? short[1] + "/" + short[2] + "/" + short[3] : "BOOK", saved: !!opts.saved, drive: opts.drive || null, book: opts.book || null };
     [S.endY,S.endM] = parseKey(D.maxD); S.catSel = null; S.dash.anchor = null; S.lm = null; S.cal = null; S.selDay = null; 
     Object.assign(S.tx, { q:"", type:"all", cat:"", acct:"", limit:80 });
     S._bytes = bytes;
-    if (opts.remember){ S.file.saved = await IDB.put({ name, bytes, at:Date.now(), drive: opts.drive || null }); }
+    if (opts.remember){ S.file.saved = await IDB.put({ name, bytes, at:Date.now(), drive: opts.drive || null, book: opts.book || null }); }
     render();
   } catch(e){
     S.error = (e && e.message && !/^file is not a database/i.test(e.message)) ? e.message : "That file couldn't be read as a Money Manager backup. Export a fresh .mmbak from the app (Settings › Backup) and open that.";
@@ -1738,6 +1752,7 @@ async function openFile(f){ if (!f) return; const buf = new Uint8Array(await f.a
 // Paste the OAuth Client ID from Google Cloud here. Leave empty to hide the Drive feature.
 const GDRIVE_CLIENT_ID = "648039289930-eauq5cvsn73nrf1fvt1bsbrhvoq4mt0f.apps.googleusercontent.com";
 const GD_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
+const GD_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M8.5 3h7l6 10.5-3.5 6H5.5L2 13.5z"/><path d="M8.5 3l6.5 10.5H2M15.5 3L9 13.5M5.5 19.5l3.5-6h12.5"/></svg>';
 const GD = {
   token: null, exp: 0, tc: null, _lib: null,
   on(){ return !!GDRIVE_CLIENT_ID; },
@@ -1779,56 +1794,69 @@ const GD = {
     if (!r.ok) throw new Error("Google Drive returned an error (" + r.status + "). Try again in a moment.");
     return asBytes ? r.arrayBuffer() : r.json();
   },
-  async latest(){
-    const F = "&fields=" + encodeURIComponent("nextPageToken,files(id,name,modifiedTime,size,parents)");
+  // Folder IDs for a folder name (exact match), cached on this device.
+  async folderIds(name, fresh){
+    const key = "md.gdf." + name, c = store.get(key);
+    if (c && !fresh) return { ids:c.split(","), cached:true };
+    const q = "mimeType='application/vnd.google-apps.folder' and trashed=false and name='" + name.replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
+    const r = await this.api("files?q=" + encodeURIComponent(q) + "&pageSize=20&fields=" + encodeURIComponent("files(id)"));
+    const ids = (r.files || []).map(f => f.id);
+    store.set(key, ids.join(","));
+    return { ids, cached:false };
+  },
+  // Newest .mmbak inside the folder with this name. Returns null if none, or { missing:true } if there is no such folder.
+  async latest(name){
     const pick = fs => (fs || []).filter(f => /\.mmbak$/i.test(f.name)).sort((a, b) => b.modifiedTime.localeCompare(a.modifiedTime))[0] || null;
-    const folder = store.get("md.gdfolder");
-    if (folder){
-      const r = await this.api("files?q=" + encodeURIComponent(`'${folder}' in parents and trashed=false`) + "&orderBy=" + encodeURIComponent("modifiedTime desc") + "&pageSize=100" + F);
-      const f = pick(r.files); if (f) return f;
-    }
-    // First run, or the folder moved: search Drive newest-first, stop at the first backup found.
-    let pt = "";
-    for (let i = 0; i < 8; i++){
-      const r = await this.api("files?q=" + encodeURIComponent("trashed=false and mimeType!='application/vnd.google-apps.folder'") + "&orderBy=" + encodeURIComponent("modifiedTime desc") + "&pageSize=1000" + F + (pt ? "&pageToken=" + encodeURIComponent(pt) : ""));
+    for (let attempt = 0; attempt < 2; attempt++){
+      const { ids, cached } = await this.folderIds(name, attempt > 0);
+      if (!ids.length){ if (cached) continue; return { missing:true }; }
+      const q = "(" + ids.map(id => "'" + id + "' in parents").join(" or ") + ") and trashed=false";
+      const r = await this.api("files?q=" + encodeURIComponent(q) + "&orderBy=" + encodeURIComponent("modifiedTime desc") + "&pageSize=200&fields=" + encodeURIComponent("files(id,name,modifiedTime,size)"));
       const f = pick(r.files);
-      if (f){ if (f.parents && f.parents[0]) store.set("md.gdfolder", f.parents[0]); return f; }
-      if (!r.nextPageToken) break; pt = r.nextPageToken;
+      if (f || !cached) return f;   // nothing found in a cached folder: look the folder up again once (it may have been moved or recreated)
     }
     return null;
   },
   disconnect(){
     try { if (this.token && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(this.token, () => {}); } catch(e){}
     this.drop(); store.set("md.gd", "0"); store.set("md.gdfolder", "");
+    Object.values(BOOKS).forEach(n => store.set("md.gdf." + n, ""));
   }
 };
 function gdTime(iso){ const d = new Date(iso); return isNaN(d) ? "" : d.getDate() + " " + MONTHS[d.getMonth()] + " " + d.getFullYear() + ", " + pad(d.getHours()) + ":" + pad(d.getMinutes()); }
 
-async function driveLoad(){
+// Each button loads the newest backup from its own Google Drive folder. The first one is the default.
+const BOOKS = { BG: "Money Manager", BxL: "Money Manager BxL" };
+const DEFAULT_BOOK = "BG";
+
+async function driveLoad(book){
+  book = BOOKS[book] ? book : DEFAULT_BOOK;
+  const folder = BOOKS[book];
   S.gdBusy = true;
-  $("#loading").hidden = false; $("#loadingMsg").textContent = "Looking for your newest backup in Google Drive…";
+  $("#loading").hidden = false; $("#loadingMsg").textContent = "Looking for the newest " + book + " backup in Google Drive…";
   try {
-    const f = await GD.latest();
-    if (!f) throw new Error("No .mmbak backup was found in your Google Drive. Check that Money Manager has saved at least one backup to Drive, then try again.");
-    if (S.file && S.file.drive === f.modifiedTime && S.file.name === f.name){ S.gdNeed = false; return; }  // already showing it
-    $("#loadingMsg").textContent = "Downloading " + f.name + "…";
+    const f = await GD.latest(folder);
+    if (f && f.missing) throw new Error("There's no folder named \u201c" + folder + "\u201d in your Google Drive. Check the folder name in Drive, then try " + book + " again.");
+    if (!f) throw new Error("The \u201c" + folder + "\u201d folder in Google Drive has no .mmbak backup yet. Back up " + book + " from Money Manager, then try again.");
+    if (S.file && S.file.book === book && S.file.drive === f.modifiedTime && S.file.name === f.name){ S.gdNeed = false; return; }  // already showing it
+    $("#loadingMsg").textContent = "Downloading " + book + " · " + f.name + "…";
     const buf = await GD.api("files/" + encodeURIComponent(f.id) + "?alt=media", true);
     S.gdNeed = false;
-    await openBytes(new Uint8Array(buf), f.name, { remember: store.get("md.keep") === "1", drive: f.modifiedTime });
+    await openBytes(new Uint8Array(buf), f.name, { remember: store.get("md.keep") === "1", drive: f.modifiedTime, book });
   } catch(e){
-    if (e.needAuth) S.gdNeed = true; else S.error = e.message;
+    if (e.needAuth){ S.gdNeed = true; S.gdNeedBook = book; } else S.error = e.message;
   } finally { S.gdBusy = false; $("#loading").hidden = true; render(); }
 }
-function driveClick(){
+function driveClick(book){
   S.error = "";
-  if (GD.valid()) return driveLoad();
-  GD.auth().then(() => { store.set("md.gd", "1"); driveLoad(); }).catch(e => { S.error = e.message; render(); });
+  if (GD.valid()) return driveLoad(book);
+  GD.auth().then(() => { store.set("md.gd", "1"); driveLoad(book); }).catch(e => { S.error = e.message; render(); });
 }
 async function driveBoot(){
   if (!GD.on()) return;
   try { await GD.lib(); } catch(e){ if (GD.connected()){ S.error = e.message; render(); } return; }
   if (!GD.connected()) return;
-  if (GD.valid()) driveLoad();
+  if (GD.valid()) driveLoad(DEFAULT_BOOK);
   else { S.gdNeed = true; render(); }
 }
 
@@ -1838,10 +1866,10 @@ document.addEventListener("click", async e => {
   if (t.matches("[data-view]")) go(t.dataset.view);
   else if (t.matches("[data-go]")) go(t.dataset.go);
   else if (t.id === "openBtn" || t.matches("[data-open]")) $("#fileInput").click();
-  else if (t.id === "driveBtn" || t.matches("[data-drive]")) driveClick();
+  else if (t.matches("[data-drive]")) driveClick(t.dataset.drive);
   else if (t.id === "driveOff"){ GD.disconnect(); S.gdNeed = false; render(); }
   else if (t.id === "forget"){ await IDB.del(); store.set("md.keep","0"); S.file.saved = false; render(); }
-  else if (t.id === "keep"){ store.set("md.keep","1"); if (S._bytes) S.file.saved = await IDB.put({ name:S.file.name, bytes:S._bytes, at:Date.now(), drive:S.file.drive || null }); render(); }
+  else if (t.id === "keep"){ store.set("md.keep","1"); if (S._bytes) S.file.saved = await IDB.put({ name:S.file.name, bytes:S._bytes, at:Date.now(), drive:S.file.drive || null, book:S.file.book || null }); render(); }
   else if (t.id === "sampleBtn"){ loadSample(); }
 });
 $("#fileInput").addEventListener("change", e => { openFile(e.target.files[0]); e.target.value = ""; });
@@ -1877,7 +1905,7 @@ function loadSample(){ S.D = sampleData(); S.sample = true; S.file = null; SYM =
   if (location.hash && VIEWS[location.hash.slice(1)]) S.view = location.hash.slice(1);
   loadSample();
   const last = await IDB.get();
-  if (last && last.bytes) await openBytes(new Uint8Array(last.bytes), last.name, { saved:true, drive:last.drive || null });
+  if (last && last.bytes) await openBytes(new Uint8Array(last.bytes), last.name, { saved:true, drive:last.drive || null, book:last.book || null });
   driveBoot();
 })();
 </script>
