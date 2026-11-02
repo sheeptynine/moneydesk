@@ -1826,7 +1826,7 @@ const GD = {
 function gdTime(iso){ const d = new Date(iso); return isNaN(d) ? "" : d.getDate() + " " + MONTHS[d.getMonth()] + " " + d.getFullYear() + ", " + pad(d.getHours()) + ":" + pad(d.getMinutes()); }
 
 // Each button loads the newest backup from its own Google Drive folder. The first one is the default.
-const BOOKS = { BG: "Money Manager", BxL: "Money Manager BxL" };
+const BOOKS = { BG: "MoneyManager", BxL: "MoneyManager BxL" };
 const DEFAULT_BOOK = "BG";
 
 async function driveLoad(book){
