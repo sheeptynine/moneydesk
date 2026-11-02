@@ -378,6 +378,7 @@ td.r,th.r{text-align:right;white-space:nowrap}
     <div class="rail-foot">
       <div class="file-box" id="fileBox"></div>
       <button class="btn primary" id="openBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 15V3M7 8l5-5 5 5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>Open backup</button>
+      <button class="btn" id="driveBtn" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M8.5 3h7l6 10.5-3.5 6H5.5L2 13.5z"/><path d="M8.5 3l6.5 10.5H2M15.5 3L9 13.5M5.5 19.5l3.5-6h12.5"/></svg>Connect Google Drive</button>
       <input type="file" id="fileInput" accept=".mmbak,.sqlite,.db,.sqlite3" hidden>
     </div>
   </aside>
@@ -1690,11 +1691,15 @@ function render(){
   $(".top").appendChild($("#periodCtl")); $("#periodCtl").hidden = !VIEWS[S.view].period || S.view === "trends";
   const D = S.D;
   $("#viewSub").textContent = (S.sample ? "Sample data" : (S.file ? S.file.name : "")) + " · " + NF.format(D.tx.length) + " records · " + dShort(D.minD) + " " + D.minD.slice(0,4) + " – " + dShort(D.maxD) + " " + D.maxD.slice(0,4);
-  $("#banner").innerHTML = (S.error ? `<div class="err">${esc(S.error)}</div>` : "") + (S.sample ? `<div class="banner"><span><strong>You're looking at sample data.</strong> Open your Money Manager backup (.mmbak) to see your own records. The file is read inside this window and never uploaded.</span><span class="spacer"></span><button class="btn primary sm" data-open>Open backup</button></div>` : "");
+  const gdOn = GD.on(), gdCon = gdOn && GD.connected();
+  const gdBanner = (gdCon && S.gdNeed && !S.gdBusy) ? `<div class="banner"><span><strong>Google Drive is connected.</strong> Load your latest Money Manager backup from Drive.</span><span class="spacer"></span><button class="btn primary sm" data-drive>Load latest</button></div>` : "";
+  $("#banner").innerHTML = (S.error ? `<div class="err">${esc(S.error)}</div>` : "") + gdBanner + (S.sample && !gdBanner ? `<div class="banner"><span><strong>You're looking at sample data.</strong> Open your Money Manager backup (.mmbak) to see your own records. The file is read inside this window and never uploaded.</span><span class="spacer"></span>${gdOn && !gdCon ? `<button class="btn sm" data-drive>Connect Google Drive</button>` : ""}<button class="btn primary sm" data-open>Open backup</button></div>` : "");
+  const db = $("#driveBtn"); db.hidden = !gdOn; db.lastChild.textContent = gdCon ? "Load latest from Drive" : "Connect Google Drive";
   const fb = $("#fileBox");
-  fb.innerHTML = S.sample ? `<div class="meta">No backup open</div><div class="fn">Sample data</div>` :
-    `<div class="meta">Open backup</div><div class="fn">${esc(S.file.name)}</div><div class="meta">${S.file.saved ? "Kept on this device" : "Not kept after closing"}</div>
-     <div style="display:flex;gap:12px">${S.file.saved ? `<button class="linkish" id="forget">Forget</button>` : `<button class="linkish" id="keep">Keep on this device</button>`}<button class="linkish" id="sampleBtn">Show sample</button></div>`;
+  const gdLine = gdCon ? `<div class="meta">Google Drive connected · <button class="linkish" id="driveOff">Disconnect</button></div>` : "";
+  fb.innerHTML = S.sample ? `<div class="meta">No backup open</div><div class="fn">Sample data</div>${gdLine}` :
+    `<div class="meta">${S.file.drive ? "From Google Drive · saved " + esc(gdTime(S.file.drive)) : "Open backup"}</div><div class="fn">${esc(S.file.name)}</div><div class="meta">${S.file.saved ? "Kept on this device" : "Not kept after closing"}</div>
+     <div style="display:flex;gap:12px">${S.file.saved ? `<button class="linkish" id="forget">Forget</button>` : `<button class="linkish" id="keep">Keep on this device</button>`}<button class="linkish" id="sampleBtn">Show sample</button></div>${gdLine}`;
   renderView();
 }
 function renderView(){ hideTip(); VIEWS[S.view].fn($("#view")); }
@@ -1716,11 +1721,11 @@ async function openBytes(bytes, name, opts={}){
     if (!D.tx.length) throw new Error("The backup opened, but it has no transactions in it.");
     S.D = D; S.sample = false; S.error = ""; SYM = D.mainSym || "Rp";
     const short = (name.match(/\((\d{2})-(\d{2})-(\d{4})/) || []);
-    S.file = { name, short: short.length ? short[1] + "/" + short[2] + "/" + short[3] : "BOOK", saved: !!opts.saved };
+    S.file = { name, short: short.length ? short[1] + "/" + short[2] + "/" + short[3] : "BOOK", saved: !!opts.saved, drive: opts.drive || null };
     [S.endY,S.endM] = parseKey(D.maxD); S.catSel = null; S.dash.anchor = null; S.lm = null; S.cal = null; S.selDay = null; 
     Object.assign(S.tx, { q:"", type:"all", cat:"", acct:"", limit:80 });
     S._bytes = bytes;
-    if (opts.remember){ S.file.saved = await IDB.put({ name, bytes, at:Date.now() }); }
+    if (opts.remember){ S.file.saved = await IDB.put({ name, bytes, at:Date.now(), drive: opts.drive || null }); }
     render();
   } catch(e){
     S.error = (e && e.message && !/^file is not a database/i.test(e.message)) ? e.message : "That file couldn't be read as a Money Manager backup. Export a fresh .mmbak from the app (Settings › Backup) and open that.";
@@ -1729,14 +1734,114 @@ async function openBytes(bytes, name, opts={}){
 }
 async function openFile(f){ if (!f) return; const buf = new Uint8Array(await f.arrayBuffer()); openBytes(buf, f.name, { remember: store.get("md.keep") === "1" }); }
 
+/* ============ Google Drive: load the newest .mmbak straight into this window ============ */
+// Paste the OAuth Client ID from Google Cloud here. Leave empty to hide the Drive feature.
+const GDRIVE_CLIENT_ID = "";
+const GD_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
+const GD = {
+  token: null, exp: 0, tc: null, _lib: null,
+  on(){ return !!GDRIVE_CLIENT_ID; },
+  connected(){ return store.get("md.gd") === "1"; },
+  valid(){ if (!this.token){ try { const t = JSON.parse(store.get("md.gdtok") || "null"); if (t){ this.token = t.v; this.exp = t.exp; } } catch(e){} } return !!this.token && this.exp > Date.now() + 60000; },
+  drop(){ this.token = null; this.exp = 0; store.set("md.gdtok", ""); },
+  lib(){
+    return this._lib ||= new Promise((res, rej) => {
+      if (window.google?.accounts?.oauth2) return res();
+      const s = document.createElement("script"); s.src = "https://accounts.google.com/gsi/client"; s.async = true;
+      s.onload = res; s.onerror = () => { this._lib = null; rej(new Error("Couldn't reach Google. Check your connection and try again.")); };
+      document.head.appendChild(s);
+    }).then(() => {
+      if (this.tc) return;
+      this.tc = google.accounts.oauth2.initTokenClient({
+        client_id: GDRIVE_CLIENT_ID, scope: GD_SCOPE,
+        callback: r => {
+          if (r.error) return this._rej?.(new Error("Google sign-in failed (" + r.error + ")."));
+          if (!google.accounts.oauth2.hasGrantedAllScopes(r, GD_SCOPE)) return this._rej?.(new Error("Google Drive access wasn't allowed. Connect again and tick the box that lets Money Desk see your Drive files."));
+          this.token = r.access_token; this.exp = Date.now() + (+r.expires_in || 3600) * 1000;
+          store.set("md.gdtok", JSON.stringify({ v:this.token, exp:this.exp }));
+          this._res?.();
+        },
+        error_callback: e => this._rej?.(new Error(e && e.type === "popup_closed" ? "Google sign-in was closed before it finished." : e && e.type === "popup_failed_to_open" ? "Your browser blocked the Google sign-in window. Allow pop-ups for this site and try again." : "Google sign-in didn't complete."))
+      });
+    });
+  },
+  // Must run straight from a click, or the browser blocks Google's sign-in window.
+  auth(){
+    return new Promise((res, rej) => {
+      if (!this.tc) return rej(new Error("Google sign-in is still loading. Try again in a moment."));
+      this._res = res; this._rej = rej;
+      this.tc.requestAccessToken({ prompt: this.connected() ? "" : "consent" });
+    });
+  },
+  async api(path, asBytes){
+    const r = await fetch("https://www.googleapis.com/drive/v3/" + path, { headers:{ Authorization:"Bearer " + this.token } });
+    if (r.status === 401 || r.status === 403 && /auth|scope|permission/i.test(await r.clone().text())){ this.drop(); const e = new Error("Google sign-in expired."); e.needAuth = true; throw e; }
+    if (!r.ok) throw new Error("Google Drive returned an error (" + r.status + "). Try again in a moment.");
+    return asBytes ? r.arrayBuffer() : r.json();
+  },
+  async latest(){
+    const F = "&fields=" + encodeURIComponent("nextPageToken,files(id,name,modifiedTime,size,parents)");
+    const pick = fs => (fs || []).filter(f => /\.mmbak$/i.test(f.name)).sort((a, b) => b.modifiedTime.localeCompare(a.modifiedTime))[0] || null;
+    const folder = store.get("md.gdfolder");
+    if (folder){
+      const r = await this.api("files?q=" + encodeURIComponent(`'${folder}' in parents and trashed=false`) + "&orderBy=" + encodeURIComponent("modifiedTime desc") + "&pageSize=100" + F);
+      const f = pick(r.files); if (f) return f;
+    }
+    // First run, or the folder moved: search Drive newest-first, stop at the first backup found.
+    let pt = "";
+    for (let i = 0; i < 8; i++){
+      const r = await this.api("files?q=" + encodeURIComponent("trashed=false and mimeType!='application/vnd.google-apps.folder'") + "&orderBy=" + encodeURIComponent("modifiedTime desc") + "&pageSize=1000" + F + (pt ? "&pageToken=" + encodeURIComponent(pt) : ""));
+      const f = pick(r.files);
+      if (f){ if (f.parents && f.parents[0]) store.set("md.gdfolder", f.parents[0]); return f; }
+      if (!r.nextPageToken) break; pt = r.nextPageToken;
+    }
+    return null;
+  },
+  disconnect(){
+    try { if (this.token && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(this.token, () => {}); } catch(e){}
+    this.drop(); store.set("md.gd", "0"); store.set("md.gdfolder", "");
+  }
+};
+function gdTime(iso){ const d = new Date(iso); return isNaN(d) ? "" : d.getDate() + " " + MONTHS[d.getMonth()] + " " + d.getFullYear() + ", " + pad(d.getHours()) + ":" + pad(d.getMinutes()); }
+
+async function driveLoad(){
+  S.gdBusy = true;
+  $("#loading").hidden = false; $("#loadingMsg").textContent = "Looking for your newest backup in Google Drive…";
+  try {
+    const f = await GD.latest();
+    if (!f) throw new Error("No .mmbak backup was found in your Google Drive. Check that Money Manager has saved at least one backup to Drive, then try again.");
+    if (S.file && S.file.drive === f.modifiedTime && S.file.name === f.name){ S.gdNeed = false; return; }  // already showing it
+    $("#loadingMsg").textContent = "Downloading " + f.name + "…";
+    const buf = await GD.api("files/" + encodeURIComponent(f.id) + "?alt=media", true);
+    S.gdNeed = false;
+    await openBytes(new Uint8Array(buf), f.name, { remember: store.get("md.keep") === "1", drive: f.modifiedTime });
+  } catch(e){
+    if (e.needAuth) S.gdNeed = true; else S.error = e.message;
+  } finally { S.gdBusy = false; $("#loading").hidden = true; render(); }
+}
+function driveClick(){
+  S.error = "";
+  if (GD.valid()) return driveLoad();
+  GD.auth().then(() => { store.set("md.gd", "1"); driveLoad(); }).catch(e => { S.error = e.message; render(); });
+}
+async function driveBoot(){
+  if (!GD.on()) return;
+  try { await GD.lib(); } catch(e){ if (GD.connected()){ S.error = e.message; render(); } return; }
+  if (!GD.connected()) return;
+  if (GD.valid()) driveLoad();
+  else { S.gdNeed = true; render(); }
+}
+
 /* ============ wiring ============ */
 document.addEventListener("click", async e => {
   const t = e.target.closest("button"); if (!t) return;
   if (t.matches("[data-view]")) go(t.dataset.view);
   else if (t.matches("[data-go]")) go(t.dataset.go);
   else if (t.id === "openBtn" || t.matches("[data-open]")) $("#fileInput").click();
+  else if (t.id === "driveBtn" || t.matches("[data-drive]")) driveClick();
+  else if (t.id === "driveOff"){ GD.disconnect(); S.gdNeed = false; render(); }
   else if (t.id === "forget"){ await IDB.del(); store.set("md.keep","0"); S.file.saved = false; render(); }
-  else if (t.id === "keep"){ store.set("md.keep","1"); if (S._bytes) S.file.saved = await IDB.put({ name:S.file.name, bytes:S._bytes, at:Date.now() }); render(); }
+  else if (t.id === "keep"){ store.set("md.keep","1"); if (S._bytes) S.file.saved = await IDB.put({ name:S.file.name, bytes:S._bytes, at:Date.now(), drive:S.file.drive || null }); render(); }
   else if (t.id === "sampleBtn"){ loadSample(); }
 });
 $("#fileInput").addEventListener("change", e => { openFile(e.target.files[0]); e.target.value = ""; });
@@ -1772,7 +1877,8 @@ function loadSample(){ S.D = sampleData(); S.sample = true; S.file = null; SYM =
   if (location.hash && VIEWS[location.hash.slice(1)]) S.view = location.hash.slice(1);
   loadSample();
   const last = await IDB.get();
-  if (last && last.bytes) openBytes(new Uint8Array(last.bytes), last.name, { saved:true });
+  if (last && last.bytes) await openBytes(new Uint8Array(last.bytes), last.name, { saved:true, drive:last.drive || null });
+  driveBoot();
 })();
 </script>
 
