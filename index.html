@@ -1343,7 +1343,7 @@ function spendSVG(el, W0, onPick){
 
 /* ============ views ============ */
 const VIEWS = {
-  dashboard: { title:"Dashboard", fn: viewAccounts, period:true },
+  dashboard: { title:"Dashboard", fn: viewAccounts, period:false },
   transactions: { title:"Transactions", fn: viewTransactions, period:false },
   categories: { title:"Categories", fn: viewCategories, period:true },
   trends: { title:"Trends", fn: viewTrends, period:true }
@@ -1594,7 +1594,7 @@ function viewCategories(V){
 }
 
 function viewAccounts(V){
-  const D = S.D, R = range();
+  const D = S.D, lastK = D.maxD.slice(0,7), R = { label: mLabel(lastK, true), months:[lastK] };  // dashboard always shows the latest month
   const accts = Object.values(D.accts).filter(a => a.status !== "deleted" && a.group !== "Debt" && (S.showHidden || (a.status === "active" && (Math.abs(a.bal) > .5 || a.last >= addDays(D.maxD,-180)))));
   const groups = {}; accts.forEach(a => (groups[a.group] = groups[a.group] || { name:a.group, ord:a.gord, list:[] }).list.push(a));
   const G = Object.values(groups).sort((a,b) => a.ord - b.ord);
@@ -1611,7 +1611,7 @@ function viewAccounts(V){
         <div><div class="eyebrow">Assets</div><div class="num" style="font-weight:700;font-size:16px;margin-top:6px">${money(D.assets)}</div></div>
         <div><div class="eyebrow">Credit card owed</div><div class="num" style="font-weight:700;font-size:16px;margin-top:6px">${money(-D.owedCC)}</div></div>
       </div>
-      <div class="hint muted" style="font-size:12px;margin-bottom:6px">Month-end balances across all accounts; foreign-currency accounts at today's rate in your backup. Shaded: selected period.</div>
+      <div class="hint muted" style="font-size:12px;margin-bottom:6px">Month-end balances across all accounts; foreign-currency accounts at today's rate in your backup. Shaded: latest month.</div>
       <div class="chart" id="nw"></div>
     </section>
     <section class="card">
