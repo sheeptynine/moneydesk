@@ -1736,7 +1736,7 @@ async function openFile(f){ if (!f) return; const buf = new Uint8Array(await f.a
 
 /* ============ Google Drive: load the newest .mmbak straight into this window ============ */
 // Paste the OAuth Client ID from Google Cloud here. Leave empty to hide the Drive feature.
-const GDRIVE_CLIENT_ID = "";
+const GDRIVE_CLIENT_ID = "648039289930-eauq5cvsn73nrf1fvt1bsbrhvoq4mt0f.apps.googleusercontent.com";
 const GD_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
 const GD = {
   token: null, exp: 0, tc: null, _lib: null,
